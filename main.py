@@ -20,6 +20,10 @@ query($owner:String! $repo:String! $cursor:String) {
         title
         url
         number
+        authorAssociation
+        author {
+        	login
+        }
         assignees(first:100) {
           nodes {
             id
@@ -33,6 +37,9 @@ query($owner:String! $repo:String! $cursor:String) {
         comments(last:1) {
           nodes {
             authorAssociation
+            author {
+              login
+            }
           }
         }
       }
@@ -105,9 +112,21 @@ async def get_issues(*, session, owner, repository, ignore_labels, my_id):
 				):
 					continue
 
-				comments = issue["comments"]["nodes"]
-				if comments and comments[0]["authorAssociation"] in ("MEMBER", "OWNER", "COLLABORATOR"):
+				# Ignore stuff that I reported myself
+				if issue["authorAssociation"] in ("MEMBER", "OWNER", "COLLABORATOR"):
 					continue
+
+				if issue["author"]["login"] == "Lucretiel":
+					continue
+
+				# Ignore stuff that I am the most recent commentor
+				comments = issue["comments"]["nodes"]
+				if comments:
+					if comments[0]["authorAssociation"] in ("MEMBER", "OWNER", "COLLABORATOR"):
+						continue
+					if comments[0]["author"]["login"] == "Lucretiel":
+						continue
+
 
 			yield Issue(
 				title=issue["title"].strip(),
@@ -121,7 +140,7 @@ async def main(
 	owner,
 	repository,
 	token=None,
-	ignore_labels="snooze"
+	ignore_labels="snooze internal-bug"
 ):
 	headers = {
 		"Authorization": "bearer {token}".format(token=token),
