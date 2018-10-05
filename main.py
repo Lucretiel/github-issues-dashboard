@@ -7,7 +7,7 @@ import collections
 WHOAMI_QUERY = '''
 query {
   viewer {
-    id
+    login
   }
 }
 '''
@@ -26,7 +26,7 @@ query($owner:String! $repo:String! $cursor:String) {
         }
         assignees(first:100) {
           nodes {
-            id
+            login
           }
         }
         labels(first:100) {
@@ -56,16 +56,16 @@ query($owner:String! $repo:String! $cursor:String) {
 class Issue(collections.namedtuple("Issue", "title number url")):
 	pass
 
-async def get_my_id(*, session):
+async def get_my_login(*, session):
 	full_query = {
 		"query": WHOAMI_QUERY
 	}
 
 	async with session.post("https://api.github.com/graphql", json=full_query) as response:
-		return (await response.json())["data"]["viewer"]["id"]
+		return (await response.json())["data"]["viewer"]["login"]
 
 
-async def get_issues(*, session, owner, repository, ignore_labels, my_id):
+async def get_issues(*, session, owner, repository, ignore_labels, my_login):
 	ignore_labels = {label.lower() for label in ignore_labels}
 
 	async def get_page(cursor):
@@ -103,8 +103,8 @@ async def get_issues(*, session, owner, repository, ignore_labels, my_id):
 
 		for issue in issues:
 			# Always show it if I'm assigned
-			assignees = (assignee["id"] for assignee in issue["assignees"]["nodes"])
-			if my_id not in assignees:
+			assignees = (assignee["login"] for assignee in issue["assignees"]["nodes"])
+			if my_login not in assignees:
 				# Check ignore_labels, commentor status
 				if any(
 					label["name"].lower() in ignore_labels
@@ -116,7 +116,7 @@ async def get_issues(*, session, owner, repository, ignore_labels, my_id):
 				if issue["authorAssociation"] in ("MEMBER", "OWNER", "COLLABORATOR"):
 					continue
 
-				if issue["author"]["login"] == "Lucretiel":
+				if issue["author"]["login"] == my_login:
 					continue
 
 				# Ignore stuff that I am the most recent commentor
@@ -124,7 +124,7 @@ async def get_issues(*, session, owner, repository, ignore_labels, my_id):
 				if comments:
 					if comments[0]["authorAssociation"] in ("MEMBER", "OWNER", "COLLABORATOR"):
 						continue
-					if comments[0]["author"]["login"] == "Lucretiel":
+					if comments[0]["author"]["login"] == my_login:
 						continue
 
 
@@ -139,9 +139,18 @@ async def get_issues(*, session, owner, repository, ignore_labels, my_id):
 async def main(
 	owner,
 	repository,
-	token=None,
-	ignore_labels="snooze internal-bug"
+	token: "Github API token" =None,
+	ignore_labels:
+		"Space separated list of github issue labels to ignore (defaults to '%(default)s')"
+		="snooze internal-bug"
 ):
+	'''
+	This script is designed to produce a list of github issues on a repository
+	that are in need of attention. Currently, this is defined as Issues to which
+	you are assigned, or issues for which you or a maintainer are NOT the most
+	recent commentor. It also currently ignores issues which you reported, as
+	it's intended to be an aid in ensuring community responsiveness.
+	'''
 	headers = {
 		"Authorization": "bearer {token}".format(token=token),
 		"Accept": "application/json",
@@ -149,14 +158,14 @@ async def main(
 	}
 
 	async with aiohttp.ClientSession(headers=headers) as session:
-		my_id = await get_my_id(session=session)
+		my_login = await get_my_login(session=session)
 
 		async for issue in get_issues(
 			session=session,
 			owner=owner,
 			repository=repository,
 			ignore_labels=ignore_labels.split(),
-			my_id=my_id,
+			my_login=my_login,
 		):
 			print("Issue {number}\t{title}".format(
 				number=issue.number,
