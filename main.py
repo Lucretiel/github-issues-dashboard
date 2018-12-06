@@ -103,29 +103,29 @@ async def get_issues(*, session, owner, repository, ignore_labels, my_login):
 
 		for issue in issues:
 			# Always show it if I'm assigned
-			assignees = (assignee["login"] for assignee in issue["assignees"]["nodes"])
-			if my_login not in assignees:
-				# Check ignore_labels, commentor status
-				if any(
-					label["name"].lower() in ignore_labels
-					for label in issue["labels"]["nodes"]
-				):
-					continue
+			#assignees = (assignee["login"] for assignee in issue["assignees"]["nodes"])
+			#if my_login not in assignees:
+			# Check ignore_labels, commentor status
+			if any(
+				label["name"].lower() in ignore_labels
+				for label in issue["labels"]["nodes"]
+			):
+				continue
 
-				# Ignore stuff that I reported myself
-				if issue["authorAssociation"] in ("MEMBER", "OWNER", "COLLABORATOR"):
-					continue
+			# Ignore stuff that I reported myself
+			if issue["authorAssociation"] in ("MEMBER", "OWNER", "COLLABORATOR"):
+				continue
 
-				if issue["author"]["login"] == my_login:
-					continue
+			if issue["author"]["login"] == my_login:
+				continue
 
-				# Ignore stuff that I am the most recent commentor
-				comments = issue["comments"]["nodes"]
-				if comments:
-					if comments[0]["authorAssociation"] in ("MEMBER", "OWNER", "COLLABORATOR"):
-						continue
-					if comments[0]["author"]["login"] == my_login:
-						continue
+			# Ignore stuff that I am the most recent commentor
+			comments = issue["comments"]["nodes"]
+			if comments:
+				if comments[0]["authorAssociation"] in ("MEMBER", "OWNER", "COLLABORATOR"):
+					continue
+				if comments[0]["author"]["login"] == my_login:
+					continue
 
 
 			yield Issue(
